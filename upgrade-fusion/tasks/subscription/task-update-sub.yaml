@@ -1,0 +1,21 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: update-isf-sub
+spec:
+  steps:
+    - name: update-isf-sub
+      image: docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-docker-local/devops-sandbox/dev:latest
+
+      script: |
+         #!/bin/bash
+
+         echo "------ Getting 2.8.1 ISF Namespace ------"
+         sub=$(oc get sub -A -ojson | jq -r '.items[] | select(.spec.name == "isf-operator")')
+         sub_name=$(printf "%s" $sub | jq -r '.metadata.name')
+         fusion_ns=$(printf "%s" $sub | jq -r '.metadata.namespace')         
+
+         echo "------ Patching 2.8.1 subscription ------"
+         oc patch sub $sub_name -n $fusion_ns --type=merge -p '{"spec": {"source": "fusion-29-catsrc"}}'
+
+         echo "------ Patched 2.8.1 subscription ------"

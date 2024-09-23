@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: pipeline-samples
+
+resources:
+  - role-permissions/role.yaml
+  - role-permissions/rolebinding.yaml
+  - upgrade-fusion/tasks/catsrc/task-create-catsrc.yaml
+  - upgrade-fusion/tasks/subscription/task-update-sub.yaml
+  - upgrade-fusion/tasks/installplan/task-approve-ip.yaml
+  - monitor-fusion-upgrade/tasks/task-monitor-fusion-upgrade.yaml
+  - pipelines/pipeline-upgrade-fusion.yaml
+  - pipelines/pipelinerun-upgrade-fusion.yaml
+  

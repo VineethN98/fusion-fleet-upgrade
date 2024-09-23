@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: isf-upgrade-pipeline
+spec:
+  tasks:
+    - name: create-catsrc
+      taskRef:
+        name: create-catsrc
+    - name: update-isf-sub
+      taskRef:
+        name: update-isf-sub
+      runAfter:
+        - create-catsrc
+    - name: approve-isf-ip
+      taskRef:
+        name: approve-isf-ip
+      runAfter:
+        - update-isf-sub
+    - name:  monitor-fusion-upgrade
+      taskRef:
+        name: monitor-fusion-upgrade
+      runAfter:
+        - approve-isf-ip

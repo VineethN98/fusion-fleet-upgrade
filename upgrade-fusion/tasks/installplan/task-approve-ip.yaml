@@ -1,0 +1,80 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: approve-isf-ip
+spec:
+  steps:
+    - name: approve-isf-ip
+      image: docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-docker-local/devops-sandbox/dev:latest
+      script: |
+         #!/bin/bash
+         
+         TIMEOUT=300
+         START_TIME=$(date +%s)
+
+         checkFusionOperatorUpgrade(){
+          while true; do
+              # Wait for upgrade to be available
+              
+              sub=$(oc get sub -A -ojson | jq -r '.items[] | select(.spec.name == "isf-operator")')
+              fusion_installed_csv=$(printf %s $sub | jq -r '.status.installedCSV')
+              fusion_current_csv=$(printf %s $sub | jq -r '.status.currentCSV')
+
+              if [[ fusion_installed_csv != fusion_current_csv ]]; then
+                echo "Fusion operator upgrade is available, monitoring the upgrade"
+                break
+              else
+                echo "Waiting for Fusion operator upgrade to become available"
+              fi
+
+              CURRENT_TIME=$(date +%s)
+              ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+              if [[ "$ELAPSED_TIME" -ge "$TIMEOUT" ]]; then
+                  echo "Timeout reached for operator upgrade to be available!"
+                  exit 1
+              fi
+            done
+         }
+
+         sub=$(oc get sub -A -ojson | jq -r '.items[] | select(.spec.name == "isf-operator")')
+         sub_name=$(printf "%s" $sub | jq -r '.metadata.name')
+         fusion_ns=$(printf "%s" $sub | jq -r '.metadata.namespace')
+
+         if [[ $(printf %s $sub | jq -r '.spec.installPlanApproval') == "Automatic" ]]; then
+            echo "Fusion operator approval plan is automatic, skipping IP approval"
+            checkFusionOperatorUpgrade
+            exit 0
+         fi
+
+         TIMEOUT=180
+         START_TIME=$(date +%s)
+
+         echo "------ Check for ISF upgrade ------"
+         while true; do
+          sub=$(oc get sub -A -ojson | jq -r '.items[] | select(.spec.name == "isf-operator")')
+          if [[ $(oc get sub $sub_name -n $fusion_ns -ojson | jq -r '.status.state') = "UpgradePending" ]]; then
+            echo "Fusion operator upgrade is available!!!"
+            break
+          else
+            echo "Waiting for Fusion operator upgrade to become available"
+          fi
+
+          CURRENT_TIME=$(date +%s)
+          ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+          if [[ "$ELAPSED_TIME" -ge "$TIMEOUT" ]]; then
+              echo "Timeout reached for operator upgrade to be available!"
+              exit 1
+          fi
+
+          sleep 1
+         done
+
+         echo "------ Getting IP details ------"
+         ip=$(oc get ip -n ${fusion_ns} -ojson | jq -r '.items[] | select(.status.bundleLookups[].catalogSourceRef.name == "fusion-29-catsrc") | .metadata.name')
+
+         echo "------ Approving IP ------"
+         oc patch ip $ip -n $fusion_ns --type=merge -p '{"spec": {"approved": true}}'
+
+         echo "------ IP Approved ------"
+
+         checkFusionOperatorUpgrade

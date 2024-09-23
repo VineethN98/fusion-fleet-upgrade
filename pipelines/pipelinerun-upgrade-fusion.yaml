@@ -1,0 +1,7 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name:  isf-upgrade-pipeline-run
+spec:
+  pipelineRef:
+    name: isf-upgrade-pipeline

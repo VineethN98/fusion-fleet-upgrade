@@ -1,0 +1,55 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: monitor-fusion-upgrade
+spec:
+  steps:
+    - name: monitor-fusion-upgrade
+      image: docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-docker-local/devops-sandbox/dev:latest
+      script: |
+        #!/bin/bash
+
+        echo "------ Fetching ISF subscription ------"
+        sub=$(oc get sub -A -ojson | jq -r '.items[] | select(.spec.name == "isf-operator")')
+        sub_name=$(printf "%s" $sub | jq -r '.metadata.name')
+        fusion_ns=$(printf "%s" $sub | jq -r '.metadata.namespace')
+
+        TIMEOUT=600
+        START_TIME=$(date +%s)
+
+
+         echo "------ Monitor ISF upgrade ------"
+         while true; do
+          sub=$(oc get sub $sub_name -n $fusion_ns -ojson)
+
+          # 2.9 CSV
+          fusion_csv_name=$(printf %s $sub | jq -r '.status.currentCSV')
+          fusion_csv=$(oc get csv $fusion_csv_name -n $fusion_ns -ojson 2>&1)
+
+          # Check for "not found" string. If found then continue
+          if [[ $? -eq 1 ]]; then
+            if [[ $fusion_csv == *"not found"* ]]; then
+              echo "ISF upgrade hasn't started yet"
+            else
+              echo "Error while fetching Fusion CSV"
+              continue
+            fi
+          fi
+
+          if [[ $(printf "%s" $fusion_csv | jq -r '.status.phase') == "Succeeded" ]]; then
+            echo "Fusion upgrade has completed!!!"
+            exit 0
+          else
+            echo "Fusion upgrade is in progress"
+          fi
+
+          CURRENT_TIME=$(date +%s)
+          ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+          if [[ "$ELAPSED_TIME" -ge "$TIMEOUT" ]]; then
+              echo "Timeout reached!"
+              exit 1
+          fi
+
+          sleep 30
+         done
+        

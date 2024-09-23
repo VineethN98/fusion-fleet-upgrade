@@ -1,0 +1,48 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: create-catsrc
+spec:
+  steps:
+    - name: create-catsrc
+      image: docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-docker-local/devops-sandbox/dev:latest
+      script: |
+        #!/bin/bash
+        
+        echo "------ Creating 2.9 catsrc ------"
+
+        cat <<EOF > catsrc.yaml
+        apiVersion: operators.coreos.com/v1alpha1
+        kind: CatalogSource
+        metadata:
+          name: fusion-29-catsrc
+          namespace: openshift-marketplace
+        spec:
+          displayName: Fusion Catalogsource
+          image: 'docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/sds-2.9.0/isf-operator-software-catalog:2.9.0-25288834'
+          publisher: IBM
+          sourceType: grpc
+        EOF
+        
+        oc apply -f catsrc.yaml
+
+        TIMEOUT=300
+        START_TIME=$(date +%s)
+
+        echo "------ Check for catalogsource status ------"
+        while true; do
+          if [[ $(oc get catsrc fusion-29-catsrc -n openshift-marketplace -ojson | jq -r '.status.connectionState.lastObservedState') = "READY" ]]; then
+            echo "CatalogSource is available!!!"
+            break
+          fi
+
+          CURRENT_TIME=$(date +%s)
+          ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+          if [[ "$ELAPSED_TIME" -ge "$TIMEOUT" ]]; then
+              echo "Timeout reached!"
+              exit 1
+          fi
+          sleep 1
+        done
+
+        echo "------ catalogsource created ------"
